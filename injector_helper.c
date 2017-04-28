@@ -81,6 +81,8 @@ struct proxy {
 
 void proxy_add_injector(proxy* p, endpoint ep)
 {
+    // TODO: Don't add duplicate injectors.
+
     injector* c = create_injector(ep);
     STAILQ_INSERT_TAIL(&p->injectors, c, tailq);
 }
@@ -125,14 +127,6 @@ static void handle_injector_response(struct evhttp_request *res, void *ctx)
     evbuffer_free(evb_out);
 }
 
-struct evhttp_connection* make_http_connection(struct event_base *evbase, endpoint ep)
-{
-    char addr[32];
-    sprintf(addr, "%d.%d.%d.%d", ep.ip[0], ep.ip[1], ep.ip[2], ep.ip[3]);
-    struct evhttp_connection *http_con = evhttp_connection_base_new(evbase, NULL, addr, ep.port);
-    return http_con;
-}
-
 void handle_client_request(struct evhttp_request *req_in, void *arg)
 {
     proxy *p = (proxy*) arg;
@@ -169,7 +163,8 @@ void handle_client_request(struct evhttp_request *req_in, void *arg)
 
     evhttp_add_header(hdr_out, "Connection", "close");
 
-    struct evhttp_connection *http_con = make_http_connection(p->net->evbase, inj->ep);
+    struct evhttp_connection *http_con
+        = evhttp_connection_base_new(p->net->evbase, NULL, "127.0.0.1", TCP_TO_UTP_REDIRECT_PORT);
 
     int result = evhttp_make_request(http_con, req_out, type, uri);
 
@@ -252,6 +247,11 @@ static void on_injectors_found(proxy *proxy, const byte *peers, uint num_peers) 
     for (uint i = 0; i < num_peers; ++i) {
         endpoint ep = *((endpoint*) peers + i * sizeof(endpoint));
         ep.port = ntohs(ep.port);
+
+        {
+            printf("  %d.%d.%d.%d:%d", ep.ip[0], ep.ip[1], ep.ip[2], ep.ip[3], (int)ep.port);
+        }
+
         proxy_add_injector(proxy, ep);
     }
 }
@@ -309,18 +309,111 @@ proxy* proxy_create(network *n)
     return p;
 }
 
-static
-void add_test_injector(proxy *p)
+static void add_test_injector(proxy *p)
 {
     endpoint test_ep;
 
-    test_ep.ip[0] = 46;
-    test_ep.ip[1] = 101;
-    test_ep.ip[2] = 176;
-    test_ep.ip[3] = 77;
-    test_ep.port = 80;
+    //test_ep.ip[0] = 46;
+    //test_ep.ip[1] = 101;
+    //test_ep.ip[2] = 176;
+    //test_ep.ip[3] = 77;
+    //test_ep.port = 80;
+    test_ep.ip[0] = 127;
+    test_ep.ip[1] = 0;
+    test_ep.ip[2] = 0;
+    test_ep.ip[3] = 1;
+    test_ep.port = 7000;
 
     proxy_add_injector(p, test_ep);
+}
+
+static void
+conn_readcb(struct bufferevent *bev, void *user_data)
+{
+    printf("read data\n");
+}
+
+static void
+conn_writecb(struct bufferevent *bev, void *user_data)
+{
+	struct evbuffer *output = bufferevent_get_output(bev);
+	if (evbuffer_get_length(output) == 0) {
+		printf("flushed answer\n");
+		bufferevent_free(bev);
+	}
+}
+
+static void
+conn_eventcb(struct bufferevent *bev, short events, void *user_data)
+{
+	if (events & BEV_EVENT_EOF) {
+		printf("Connection closed.\n");
+	} else if (events & BEV_EVENT_ERROR) {
+		printf("Got an error on the connection: %s\n",
+		    strerror(errno));/*XXX win32*/
+	}
+	/* None of the other events can happen here, since we haven't enabled
+	 * timeouts */
+	bufferevent_free(bev);
+}
+
+static void
+listener_cb(struct evconnlistener *listener, evutil_socket_t fd,
+    struct sockaddr *sa, int socklen, void *user_data)
+{
+    printf("Accepted\n");
+    proxy* p = user_data;
+	struct event_base *base = p->net->evbase;
+	struct bufferevent *bev;
+
+	bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
+	if (!bev) {
+		fprintf(stderr, "Error constructing bufferevent!");
+		event_base_loopbreak(base);
+		return;
+	}
+	bufferevent_setcb(bev, conn_readcb, conn_writecb, conn_eventcb, NULL);
+	bufferevent_enable(bev, EV_WRITE);
+	bufferevent_disable(bev, EV_READ);
+
+    // Connect to a random uTP injector.
+    utp_socket *s = utp_create_socket(p->net->utp);
+    injector *i = pick_random_injector(p);
+
+    char addr[32];
+    sprintf(addr, "%d.%d.%d.%d", i->ep.ip[0], i->ep.ip[1], i->ep.ip[2], i->ep.ip[3]);
+
+    printf("Connecting to UTP:%s:%d", addr, (int) i->ep.port);
+
+    struct sockaddr_in dest;
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(i->ep.port);
+    //inet_pton(AF_INET, addr, &dest.sin_addr);
+    inet_aton(addr, &dest.sin_addr);
+
+    utp_connect(s, (const struct sockaddr*)&dest, sizeof(dest));
+}
+
+static
+int start_tcp_to_utp_redirect(proxy *p)
+{
+    event_base *evbase = p->net->evbase;
+    struct sockaddr_in sin;
+    memset(&sin, 0, sizeof(sin));
+    sin.sin_family = AF_INET;
+    sin.sin_port = htons(TCP_TO_UTP_REDIRECT_PORT);
+
+    struct evconnlistener *listener = evconnlistener_new_bind(evbase, listener_cb, p,
+        LEV_OPT_REUSEABLE|LEV_OPT_CLOSE_ON_FREE, -1,
+        (struct sockaddr*)&sin,
+        sizeof(sin));
+
+    if (!listener) {
+        fprintf(stderr, "Could not create a listener!\n");
+        return 1;
+    }
+
+    return 0;
 }
 
 int main(int argc, char *argv[])
@@ -330,10 +423,12 @@ int main(int argc, char *argv[])
 
     network *n = network_setup(address, port);
 
+
     proxy *p = proxy_create(n);
 
     assert(p);
 
+    start_tcp_to_utp_redirect(p);
     add_test_injector(p);
 
     // TODO
