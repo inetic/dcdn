@@ -17,14 +17,14 @@ handle_connection(socket_t s)
 {
     for (;;) {
         req = http_read_request(s);
-        content_hash = dht_get(hash(req->url));
+        sig = dht_get(hash(req->url));
         // these can happen in parallel, but only one http_response should be returned
-        if (!content_hash) {
+        if (!sig) {
             injector = injector_get_any_connection();
             data = request(injector, req->url);
             http_respond(s, data);
         } else {
-            swarm_hash = dht_get(content_hash);
+            swarm_hash = dht_get(sig);
             if (swarm_hash) {
                 data = swarm(swarm_hash);
                 http_respond(s, data);
