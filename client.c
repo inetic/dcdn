@@ -139,15 +139,13 @@ int proxy_header_cb(evhttp_request *req, void *arg)
     case HTTP_MOVEPERM:
     case HTTP_MOVETEMP: {
         // redirects are not allowed
-        evhttp_cancel_request(req);
-        return 0;
+        return -1;
     }
     case HTTP_OK:
     case HTTP_NOCONTENT:
         break;
     default:
-        // XXX: if the code is not HTTP_OK or HTTP_NOCONTENT, we probably don't want to hash and store the value
-        break;
+        return -1;
     }
 
     if (req == p->proxy_head_req) {
@@ -377,8 +375,7 @@ int connect_header_cb(evhttp_request *req, void *arg)
     connect_req *c = (connect_req *)arg;
     debug("c:%p connect_header_cb %d %s\n", c, evhttp_request_get_response_code(req), evhttp_request_get_response_code_line(req));
     if (evhttp_request_get_response_code(req) != 200) {
-        evhttp_cancel_request(req);
-        return 0;
+        return -1;
     }
 
     if (c->direct) {
