@@ -37,19 +37,66 @@ typedef struct {
     evhttp_request *proxy_req;
     evhttp_request *proxy_head_req;
     evhttp_request *server_req;
+    void (*evhttp_handle_request)(struct evhttp_request *, void *);
     crypto_generichash_state content_state;
     evbuffer *content;
+    bool injector:1;
+    bool dont_free:1;
 } proxy_request;
 
 address *injectors;
 uint injectors_len;
 address *injector_proxies;
 uint injector_proxies_len;
+time_t injector_reachable;
 
+
+bool memeq(const uint8_t *a, const uint8_t *b, size_t len)
+{
+    return memcmp(a, b, len) == 0;
+}
+
+void add_addresses(address **addrs, uint addrs_len, const byte *peers, uint num_peers)
+{
+    assert(sizeof(address) == 6);
+    for (uint i = 0; i < num_peers; i++) {
+        for (uint j = 0; j < addrs_len; j++) {
+            if (memeq(&peers[6 * i], (const uint8_t *)&(*addrs)[j], 6)) {
+                return;
+            }
+        }
+        addrs_len++;
+        *addrs = realloc(*addrs, addrs_len * sizeof(address));
+        memcpy(&(*addrs)[addrs_len-1], &peers[6 * i], 6);
+        address *a = &(*addrs)[addrs_len-1];
+        debug("new peer %s:%d\n", inet_ntoa((struct in_addr){.s_addr = a->ip}), ntohs(a->port));
+    }
+}
+
+void update_injector_proxy_swarm(network *n)
+{
+    add_nodes_callblock c = ^(const byte *peers, uint num_peers) {
+        if (peers) {
+            add_addresses(&injector_proxies, injector_proxies_len, peers, num_peers);
+        }
+    };
+    if (injector_reachable) {
+        dht_get_peers(n->dht, injector_proxy_swarm, c);
+    } else {
+        dht_announce(n->dht, injector_proxy_swarm, c);
+    }
+}
+
+void remove_server_req_cb(proxy_request *p)
+{
+    p->server_req->cb = p->evhttp_handle_request;
+    p->server_req->cb_arg = p->n->http;
+    evhttp_request_set_error_cb(p->server_req, NULL);
+}
 
 void proxy_request_cleanup(proxy_request *p)
 {
-    if (p->proxy_req || p->proxy_head_req || p->direct_req) {
+    if (p->dont_free || p->proxy_req || p->proxy_head_req || p->direct_req) {
         return;
     }
     if (p->server_req) {
@@ -58,6 +105,7 @@ void proxy_request_cleanup(proxy_request *p)
         } else {
             evhttp_send_reply_end(p->server_req);
         }
+        remove_server_req_cb(p);
         p->server_req = NULL;
     }
     if (p->content) {
@@ -104,7 +152,7 @@ void direct_error_cb(enum evhttp_request_error error, void *arg)
 void direct_request_done_cb(evhttp_request *req, void *arg)
 {
     proxy_request *p = (proxy_request*)arg;
-    debug("p:%p direct_request_done_cb\n", p);
+    debug("p:%p direct_request_done_cb %p\n", p, req);
     if (!req) {
         return;
     }
@@ -175,6 +223,9 @@ void proxy_error_cb(enum evhttp_request_error error, void *arg)
 {
     proxy_request *p = (proxy_request*)arg;
     debug("p:%p proxy_error_cb %d\n", p, error);
+    if (p->injector) {
+        injector_reachable = 0;
+    }
     p->proxy_req = NULL;
     proxy_request_cleanup(p);
 }
@@ -232,6 +283,12 @@ void proxy_request_done_cb(evhttp_request *req, void *arg)
 {
     proxy_request *p = (proxy_request*)arg;
     debug("p:%p proxy_request_done_cb\n", p);
+    if (!req->evcon) {
+        // connection failed
+        if (p->injector) {
+            injector_reachable = 0;
+        }
+    }
     if (!req) {
         return;
     }
@@ -240,6 +297,10 @@ void proxy_request_done_cb(evhttp_request *req, void *arg)
         if (sign) {
             assert(req == p->proxy_req || !p->proxy_req);
             if (verify_signature(p, sign)) {
+                if (p->injector) {
+                    injector_reachable = time(NULL);
+                    update_injector_proxy_swarm(p->n);
+                }
                 debug("responding with %d %s %u\n", evhttp_request_get_response_code(req),
                     evhttp_request_get_response_code_line(req), evbuffer_get_length(p->content));
                 if (p->direct_req) {
@@ -252,6 +313,7 @@ void proxy_request_done_cb(evhttp_request *req, void *arg)
                 }
                 evhttp_send_reply(p->server_req, evhttp_request_get_response_code(req),
                     evhttp_request_get_response_code_line(req), p->content);
+                remove_server_req_cb(p);
                 p->server_req = NULL;
             }
         }
@@ -265,6 +327,14 @@ void proxy_request_done_cb(evhttp_request *req, void *arg)
 }
 
 evhttp_connection* injector_connection(network *n)
+{
+    evhttp_connection *evcon = evhttp_connection_base_new(n->evbase, n->evdns, "0.0.0.0", 8005);
+    // XXX: disable IPv6, since evdns waits for *both* and the v6 request often times out
+    evhttp_connection_set_family(evcon, AF_INET);
+    return evcon;
+}
+
+evhttp_connection* injector_proxy_connection(network *n)
 {
     evhttp_connection *evcon = evhttp_connection_base_new(n->evbase, n->evdns, "0.0.0.0", 8005);
     // XXX: disable IPv6, since evdns waits for *both* and the v6 request often times out
@@ -312,6 +382,11 @@ void proxy_submit_request(proxy_request *p, const evhttp_uri *uri)
     char request_uri[2048];
     evhttp_uri_join(uri, request_uri, sizeof(request_uri));
     evhttp_connection *evcon = injector_connection(p->n);
+    p->injector = true;
+    if (!evcon) {
+        p->injector = false;
+        evcon = injector_proxy_connection(p->n);
+    }
     evhttp_make_request(evcon, p->proxy_req, EVHTTP_REQ_GET, request_uri);
     evhttp_make_request(evcon, p->proxy_head_req, EVHTTP_REQ_HEAD, request_uri);
     debug("p:%p con:%p proxy request submitted: %s\n", p, evhttp_request_get_connection(p->proxy_req), evhttp_request_get_uri(p->proxy_req));
@@ -321,6 +396,8 @@ void server_error_cb(enum evhttp_request_error error, void *arg)
 {
     proxy_request *p = (proxy_request*)arg;
     debug("p:%p server_error_cb %d\n", p, error);
+    p->server_req = NULL;
+    p->dont_free = true;
     if (p->direct_req) {
         evhttp_cancel_request(p->direct_req);
         p->direct_req = NULL;
@@ -333,8 +410,14 @@ void server_error_cb(enum evhttp_request_error error, void *arg)
         evhttp_cancel_request(p->proxy_head_req);
         p->proxy_head_req = NULL;
     }
-    p->server_req = NULL;
+    p->dont_free = false;
     proxy_request_cleanup(p);
+}
+
+void server_handle_request(struct evhttp_request *req, void *arg)
+{
+    proxy_request *p = (proxy_request*)arg;
+    p->evhttp_handle_request(req, p->n->http);
 }
 
 void submit_request(network *n, evhttp_request *server_req, const evhttp_uri *uri)
@@ -342,8 +425,25 @@ void submit_request(network *n, evhttp_request *server_req, const evhttp_uri *ur
     proxy_request *p = alloc(proxy_request);
     p->n = n;
     p->server_req = server_req;
+    p->evhttp_handle_request = p->server_req->cb;
+    p->server_req->cb = server_handle_request;
+    p->server_req->cb_arg = p;
     evhttp_request_set_error_cb(p->server_req, server_error_cb);
-    direct_submit_request(p, uri);
+
+    evhttp_connection *evcon = evhttp_request_get_connection(server_req);
+
+    // https://github.com/libevent/libevent/issues/510
+    int fd = bufferevent_getfd(evhttp_connection_get_bufferevent(evcon));
+    struct sockaddr_storage ss;
+    socklen_t len = sizeof(ss);
+    getpeername(fd, (struct sockaddr *)&ss, &len);
+    if (ss.ss_family == AF_INET) {
+        const struct sockaddr_in *sin = (struct sockaddr_in *)&ss;
+        uint8_t *ip = (uint8_t*)&sin->sin_addr;
+        if (ip[0] == 127) {
+            direct_submit_request(p, uri);
+        }
+    }
     proxy_submit_request(p, uri);
 }
 
@@ -468,28 +568,6 @@ void http_request_cb(evhttp_request *req, void *arg)
     submit_request(n, req, evhttp_request_get_evhttp_uri(req));
 }
 
-bool memeq(const uint8_t *a, const uint8_t *b, size_t len)
-{
-    return memcmp(a, b, len) == 0;
-}
-
-void add_addresses(address **addrs, uint addrs_len, const byte *peers, uint num_peers)
-{
-    assert(sizeof(address) == 6);
-    for (uint i = 0; i < num_peers; i++) {
-        for (uint j = 0; j < addrs_len; j++) {
-            if (memeq(&peers[6 * i], (const uint8_t *)&(*addrs)[j], 6)) {
-                return;
-            }
-        }
-        addrs_len++;
-        *addrs = realloc(*addrs, addrs_len * sizeof(address));
-        memcpy(&(*addrs)[addrs_len-1], &peers[6 * i], 6);
-        address *a = &(*addrs)[addrs_len-1];
-        debug("new peer %s:%d\n", inet_ntoa((struct in_addr){.s_addr = a->ip}), ntohs(a->port));
-    }
-}
-
 int main(int argc, char *argv[])
 {
     network *n = network_setup("0.0.0.0", "9390");
@@ -508,11 +586,7 @@ int main(int argc, char *argv[])
                 add_addresses(&injectors, injectors_len, peers, num_peers);
             }
         });
-        dht_get_peers(n->dht, injector_proxy_swarm, ^(const byte *peers, uint num_peers) {
-            if (peers) {
-                add_addresses(&injector_proxies, injector_proxies_len, peers, num_peers);
-            }
-        });
+        update_injector_proxy_swarm(n);
     };
     cb();
     timer_repeating(n, 25 * 60 * 1000, cb);
