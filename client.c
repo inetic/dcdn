@@ -363,12 +363,13 @@ void connect_cleanup(connect_req *c)
 void connected(connect_req *c, bufferevent *other)
 {
     debug("c:%p connected %p\n", c, other);
-    bufferevent *bev = evhttp_connection_detach_bufferevent(evhttp_request_get_connection(c->server_req), c->server_req);
+    bufferevent *bev = evhttp_connection_detach_bufferevent(evhttp_request_get_connection(c->server_req));
     c->server_req = NULL;
     connect_cleanup(c);
     evbuffer_add_printf(bufferevent_get_output(bev), "HTTP/1.0 200 Connection established\r\n\r\n");
     bev_splice(bev, other);
     bufferevent_enable(bev, EV_READ|EV_WRITE);
+    bufferevent_enable(other, EV_READ|EV_WRITE);
 }
 
 int connect_header_cb(evhttp_request *req, void *arg)
@@ -385,10 +386,9 @@ int connect_header_cb(evhttp_request *req, void *arg)
         c->direct = NULL;
     }
 
-    bufferevent *other = evhttp_connection_detach_bufferevent(evhttp_request_get_connection(req), req);
-    c->proxy = NULL;
+    bufferevent *other = evhttp_connection_detach_bufferevent(evhttp_request_get_connection(req));
     connected(c, other);
-    return 0;
+    return -1;
 }
 
 void connect_error_cb(enum evhttp_request_error error, void *arg)
@@ -446,13 +446,11 @@ void connect_request(network *n, evhttp_request *req)
     evhttp_uri_free(uri);
     bufferevent_enable(c->direct, EV_READ);
 
-    /*
     c->proxy = evhttp_request_new(NULL, c);
     evhttp_request_set_header_cb(c->proxy, connect_header_cb);
     evhttp_request_set_error_cb(c->proxy, connect_error_cb);
     evhttp_connection *evcon = injector_connection(n);
     evhttp_make_request(evcon, c->proxy, EVHTTP_REQ_CONNECT, evhttp_request_get_uri(req));
-    */
 }
 
 void http_request_cb(evhttp_request *req, void *arg)
