@@ -79,12 +79,13 @@ int direct_header_cb(evhttp_request *req, void *arg)
 {
     proxy_request *p = (proxy_request*)arg;
     debug("p:%p direct_header_cb %d %s\n", p, evhttp_request_get_response_code(req), evhttp_request_get_response_code_line(req));
-
     if (p->proxy_req) {
         evhttp_cancel_request(p->proxy_req);
+        p->proxy_req = NULL;
     }
     if (p->proxy_head_req) {
         evhttp_cancel_request(p->proxy_head_req);
+        p->proxy_head_req = NULL;
     }
     copy_all_headers(req, p->server_req);
     evhttp_send_reply_start(p->server_req, evhttp_request_get_response_code(req), evhttp_request_get_response_code_line(req));
@@ -156,6 +157,7 @@ int proxy_header_cb(evhttp_request *req, void *arg)
         const char *sign = evhttp_find_header(evhttp_request_get_input_headers(req), "X-Sign");
         if (sign) {
             evhttp_cancel_request(p->proxy_head_req);
+            p->proxy_head_req = NULL;
         }
     }
 
@@ -242,6 +244,7 @@ void proxy_request_done_cb(evhttp_request *req, void *arg)
                     evhttp_request_get_response_code_line(req), evbuffer_get_length(p->content));
                 if (p->direct_req) {
                     evhttp_cancel_request(p->direct_req);
+                    p->direct_req = NULL;
                 }
                 const char *response_header_whitelist[] = {"Content-Length", "Content-Type"};
                 for (size_t i = 0; i < lenof(response_header_whitelist); i++) {
@@ -320,12 +323,15 @@ void server_error_cb(enum evhttp_request_error error, void *arg)
     debug("p:%p server_error_cb %d\n", p, error);
     if (p->direct_req) {
         evhttp_cancel_request(p->direct_req);
+        p->direct_req = NULL;
     }
     if (p->proxy_req) {
         evhttp_cancel_request(p->proxy_req);
+        p->proxy_req = NULL;
     }
     if (p->proxy_head_req) {
         evhttp_cancel_request(p->proxy_head_req);
+        p->proxy_head_req = NULL;
     }
     p->server_req = NULL;
     proxy_request_cleanup(p);
@@ -408,6 +414,7 @@ void connect_event_cb(bufferevent *bev, short events, void *ctx)
     } else if (events & BEV_EVENT_CONNECTED) {
         if (c->proxy) {
             evhttp_cancel_request(c->proxy);
+            c->proxy = NULL;
         }
         c->direct = NULL;
         connected(c, bev);
