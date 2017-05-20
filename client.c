@@ -283,14 +283,14 @@ void proxy_request_done_cb(evhttp_request *req, void *arg)
 {
     proxy_request *p = (proxy_request*)arg;
     debug("p:%p proxy_request_done_cb\n", p);
+    if (!req) {
+        return;
+    }
     if (!req->evcon) {
         // connection failed
         if (p->injector) {
             injector_reachable = 0;
         }
-    }
-    if (!req) {
-        return;
     }
     if (p->server_req) {
         const char *sign = evhttp_find_header(evhttp_request_get_input_headers(req), "X-Sign");
