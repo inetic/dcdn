@@ -95,7 +95,7 @@ int direct_header_cb(evhttp_request *req, void *arg)
 void direct_error_cb(enum evhttp_request_error error, void *arg)
 {
     proxy_request *p = (proxy_request*)arg;
-    fprintf(stderr, "p:%p direct_error_cb %d\n", p, error);
+    debug("p:%p direct_error_cb %d\n", p, error);
     p->direct_req = NULL;
     proxy_request_cleanup(p);
 }
@@ -172,7 +172,7 @@ int proxy_header_cb(evhttp_request *req, void *arg)
 void proxy_error_cb(enum evhttp_request_error error, void *arg)
 {
     proxy_request *p = (proxy_request*)arg;
-    fprintf(stderr, "p:%p proxy_error_cb %d\n", p, error);
+    debug("p:%p proxy_error_cb %d\n", p, error);
     p->proxy_req = NULL;
     proxy_request_cleanup(p);
 }
@@ -180,7 +180,7 @@ void proxy_error_cb(enum evhttp_request_error error, void *arg)
 void proxy_head_error_cb(enum evhttp_request_error error, void *arg)
 {
     proxy_request *p = (proxy_request*)arg;
-    fprintf(stderr, "p:%p proxy_head_error_cb %d\n", p, error);
+    debug("p:%p proxy_head_error_cb %d\n", p, error);
     p->proxy_head_req = NULL;
     proxy_request_cleanup(p);
 }
@@ -317,7 +317,7 @@ void proxy_submit_request(proxy_request *p, const evhttp_uri *uri)
 void server_error_cb(enum evhttp_request_error error, void *arg)
 {
     proxy_request *p = (proxy_request*)arg;
-    fprintf(stderr, "p:%p server_error_cb %d\n", p, error);
+    debug("p:%p server_error_cb %d\n", p, error);
     if (p->direct_req) {
         evhttp_cancel_request(p->direct_req);
     }
