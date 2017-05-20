@@ -56,9 +56,10 @@ bool memeq(const uint8_t *a, const uint8_t *b, size_t len)
     return memcmp(a, b, len) == 0;
 }
 
-void add_addresses(address **addrs, uint addrs_len, const byte *peers, uint num_peers)
+void add_addresses(address **addrs, uint *paddrs_len, const byte *peers, uint num_peers)
 {
     assert(sizeof(address) == 6);
+    uint addrs_len = *paddrs_len;
     for (uint i = 0; i < num_peers; i++) {
         for (uint j = 0; j < addrs_len; j++) {
             if (memeq(&peers[6 * i], (const uint8_t *)&(*addrs)[j], 6)) {
@@ -66,6 +67,7 @@ void add_addresses(address **addrs, uint addrs_len, const byte *peers, uint num_
             }
         }
         addrs_len++;
+        *paddrs_len = addrs_len;
         *addrs = realloc(*addrs, addrs_len * sizeof(address));
         memcpy(&(*addrs)[addrs_len-1], &peers[6 * i], 6);
         address *a = &(*addrs)[addrs_len-1];
@@ -77,7 +79,7 @@ void update_injector_proxy_swarm(network *n)
 {
     add_nodes_callblock c = ^(const byte *peers, uint num_peers) {
         if (peers) {
-            add_addresses(&injector_proxies, injector_proxies_len, peers, num_peers);
+            add_addresses(&injector_proxies, &injector_proxies_len, peers, num_peers);
         }
     };
     if (injector_reachable) {
@@ -583,7 +585,7 @@ int main(int argc, char *argv[])
     timer_callback cb = ^{
         dht_get_peers(n->dht, injector_swarm, ^(const byte *peers, uint num_peers) {
             if (peers) {
-                add_addresses(&injectors, injectors_len, peers, num_peers);
+                add_addresses(&injectors, &injectors_len, peers, num_peers);
             }
         });
         update_injector_proxy_swarm(n);
