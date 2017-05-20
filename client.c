@@ -156,7 +156,7 @@ void direct_request_done_cb(evhttp_request *req, void *arg)
     if (!req) {
         return;
     }
-    debug("p:%p direct server_request_done_cb: %s\n", p, evhttp_request_get_uri(p->server_req));
+    debug("p:%p direct server_request_done_cb con:%p %s\n", p, req->evcon, evhttp_request_get_uri(p->server_req));
     p->direct_req = NULL;
     proxy_request_cleanup(p);
 }
