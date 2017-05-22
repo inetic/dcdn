@@ -158,6 +158,9 @@ void direct_request_done_cb(evhttp_request *req, void *arg)
     if (!req) {
         return;
     }
+    if (!req->evcon) {
+        debug("evcon:%p\n", req->evcon);
+    }
     debug("p:%p direct server_request_done_cb con:%p %s\n", p, req->evcon, evhttp_request_get_uri(p->server_req));
     p->direct_req = NULL;
     proxy_request_cleanup(p);
@@ -311,6 +314,13 @@ void proxy_request_done_cb(evhttp_request *req, void *arg)
     if (!req) {
         return;
     }
+    if (!req->evcon) {
+        debug("evcon:%p\n", req->evcon);
+        // connection failed
+        if (p->injector) {
+            injector_reachable = 0;
+        }
+    }
     if (p->server_req) {
         const char *sign = evhttp_find_header(evhttp_request_get_input_headers(req), "X-Sign");
         if (!sign) {
@@ -358,14 +368,6 @@ evhttp_connection* evhttp_utp_create(network *n, const struct sockaddr *to, sock
 {
     utp_socket *s = utp_create_socket(n->utp);
     int fd = utp_socket_create_fd(n->evbase, s);
-
-    /* TODO:
-    // connection failed
-    if (p->injector) {
-        injector_reachable = 0;
-    }
-    */
-
     utp_connect(s, to, tolen);
     bufferevent *bev = bufferevent_socket_new(n->evbase, fd, BEV_OPT_CLOSE_ON_FREE);
     char host[NI_MAXHOST];
