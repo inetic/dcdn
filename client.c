@@ -395,7 +395,7 @@ evhttp_connection* injector_proxy_connection(network *n)
     hints.ai_protocol = IPPROTO_TCP;
     struct addrinfo *res;
     getaddrinfo("127.0.0.1", "9000", &hints, &res);
-    return evhttp_utp_create(n, to, tolen);
+    return evhttp_utp_create(n, res->ai_addr, res->ai_addrlen);
 }
 
 void direct_submit_request(proxy_request *p, const evhttp_uri *uri)
