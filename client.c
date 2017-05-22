@@ -281,22 +281,45 @@ bool verify_signature(proxy_request *p, const char *sign)
     return true;
 }
 
+bool addr_is_localhost(const struct sockaddr *sa, socklen_t salen)
+{
+    if (sa->sa_family == AF_INET) {
+        const struct sockaddr_in *sin = (struct sockaddr_in *)sa;
+        uint8_t *ip = (uint8_t*)&sin->sin_addr;
+        return ip[0] == 127;
+    }
+    return false;
+}
+
+bool evcon_is_local_browser(evhttp_connection *evcon)
+{
+    int fd = bufferevent_getfd(evhttp_connection_get_bufferevent(evcon));
+    struct sockaddr_storage ss;
+    socklen_t len = sizeof(ss);
+    getsockname(fd, (struct sockaddr *)&ss, &len);
+    // AF_LOCAL is from socketpair(), which means utp
+    if (ss.ss_family == AF_LOCAL) {
+        return false;
+    }
+    return addr_is_localhost((struct sockaddr *)&ss, len);
+}
+
 void proxy_request_done_cb(evhttp_request *req, void *arg)
 {
     proxy_request *p = (proxy_request*)arg;
-    debug("p:%p proxy_request_done_cb\n", p);
+    debug("p:%p proxy_request_done_cb req:%p\n", p, req);
     if (!req) {
         return;
     }
-    if (!req->evcon) {
-        // connection failed
-        if (p->injector) {
-            injector_reachable = 0;
-        }
-    }
     if (p->server_req) {
         const char *sign = evhttp_find_header(evhttp_request_get_input_headers(req), "X-Sign");
-        if (sign) {
+        if (!sign) {
+            if (req == p->proxy_req) {
+                debug("no signature; waiting for HEAD request.\n");
+            } else {
+                fprintf(stderr, "no signature!\n");
+            }
+        } else {
             assert(req == p->proxy_req || !p->proxy_req);
             if (verify_signature(p, sign)) {
                 if (p->injector) {
@@ -313,6 +336,9 @@ void proxy_request_done_cb(evhttp_request *req, void *arg)
                 for (size_t i = 0; i < lenof(response_header_whitelist); i++) {
                     copy_header(req, p->server_req, response_header_whitelist[i]);
                 }
+                if (!evcon_is_local_browser(evhttp_request_get_connection(p->server_req))) {
+                    overwrite_header(p->server_req, "X-Sign", sign);
+                }
                 evhttp_send_reply(p->server_req, evhttp_request_get_response_code(req),
                     evhttp_request_get_response_code_line(req), p->content);
                 remove_server_req_cb(p);
@@ -328,20 +354,48 @@ void proxy_request_done_cb(evhttp_request *req, void *arg)
     proxy_request_cleanup(p);
 }
 
+evhttp_connection* evhttp_utp_create(network *n, const struct sockaddr *to, socklen_t tolen)
+{
+    utp_socket *s = utp_create_socket(n->utp);
+    int fd = utp_socket_create_fd(n->evbase, s);
+
+    /* TODO:
+    // connection failed
+    if (p->injector) {
+        injector_reachable = 0;
+    }
+    */
+
+    utp_connect(s, to, tolen);
+    bufferevent *bev = bufferevent_socket_new(n->evbase, fd, BEV_OPT_CLOSE_ON_FREE);
+    char host[NI_MAXHOST];
+    char serv[NI_MAXSERV];
+    getnameinfo(to, tolen, host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST|NI_NUMERICSERV);
+    return evhttp_connection_base_bufferevent_new(n->evbase, n->evdns, bev, host, atoi(serv));
+}
+
 evhttp_connection* injector_connection(network *n)
 {
-    evhttp_connection *evcon = evhttp_connection_base_new(n->evbase, n->evdns, "0.0.0.0", 8005);
-    // XXX: disable IPv6, since evdns waits for *both* and the v6 request often times out
-    evhttp_connection_set_family(evcon, AF_INET);
-    return evcon;
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    struct addrinfo *res;
+    getaddrinfo("127.0.0.1", "9000", &hints, &res);
+    return evhttp_utp_create(n, res->ai_addr, res->ai_addrlen);
 }
 
 evhttp_connection* injector_proxy_connection(network *n)
 {
-    evhttp_connection *evcon = evhttp_connection_base_new(n->evbase, n->evdns, "0.0.0.0", 8005);
-    // XXX: disable IPv6, since evdns waits for *both* and the v6 request often times out
-    evhttp_connection_set_family(evcon, AF_INET);
-    return evcon;
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    struct addrinfo *res;
+    getaddrinfo("127.0.0.1", "9000", &hints, &res);
+    return evhttp_utp_create(n, to, tolen);
 }
 
 void direct_submit_request(proxy_request *p, const evhttp_uri *uri)
@@ -439,12 +493,8 @@ void submit_request(network *n, evhttp_request *server_req, const evhttp_uri *ur
     struct sockaddr_storage ss;
     socklen_t len = sizeof(ss);
     getpeername(fd, (struct sockaddr *)&ss, &len);
-    if (ss.ss_family == AF_INET) {
-        const struct sockaddr_in *sin = (struct sockaddr_in *)&ss;
-        uint8_t *ip = (uint8_t*)&sin->sin_addr;
-        if (ip[0] == 127) {
-            direct_submit_request(p, uri);
-        }
+    if (addr_is_localhost((struct sockaddr *)&ss, len)) {
+        direct_submit_request(p, uri);
     }
     proxy_submit_request(p, uri);
 }
