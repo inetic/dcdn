@@ -519,7 +519,14 @@ void connect_cleanup(connect_req *c)
 void connected(connect_req *c, bufferevent *other)
 {
     debug("c:%p connected %p\n", c, other);
-    bufferevent *bev = evhttp_connection_detach_bufferevent(evhttp_request_get_connection(c->server_req));
+    evhttp_connection *evcon = evhttp_request_get_connection(c->server_req);
+    if (!evcon) {
+        // XXX: could remove this case by using the error_cb hack
+        c->server_req = NULL;
+        bufferevent_free(other);
+        return;
+    }
+    bufferevent *bev = evhttp_connection_detach_bufferevent(evcon);
     c->server_req = NULL;
     connect_cleanup(c);
     evbuffer_add_printf(bufferevent_get_output(bev), "HTTP/1.0 200 Connection established\r\n\r\n");
