@@ -284,10 +284,10 @@ bool verify_signature(proxy_request *p, const char *sign)
     return true;
 }
 
-bool addr_is_localhost(const struct sockaddr *sa, socklen_t salen)
+bool addr_is_localhost(const sockaddr *sa, socklen_t salen)
 {
     if (sa->sa_family == AF_INET) {
-        const struct sockaddr_in *sin = (struct sockaddr_in *)sa;
+        const sockaddr_in *sin = (sockaddr_in *)sa;
         uint8_t *ip = (uint8_t*)&sin->sin_addr;
         return ip[0] == 127;
     }
@@ -297,14 +297,14 @@ bool addr_is_localhost(const struct sockaddr *sa, socklen_t salen)
 bool evcon_is_local_browser(evhttp_connection *evcon)
 {
     int fd = bufferevent_getfd(evhttp_connection_get_bufferevent(evcon));
-    struct sockaddr_storage ss;
+    sockaddr_storage ss;
     socklen_t len = sizeof(ss);
-    getsockname(fd, (struct sockaddr *)&ss, &len);
+    getsockname(fd, (sockaddr *)&ss, &len);
     // AF_LOCAL is from socketpair(), which means utp
     if (ss.ss_family == AF_LOCAL) {
         return false;
     }
-    return addr_is_localhost((struct sockaddr *)&ss, len);
+    return addr_is_localhost((sockaddr *)&ss, len);
 }
 
 void proxy_request_done_cb(evhttp_request *req, void *arg)
@@ -364,7 +364,7 @@ void proxy_request_done_cb(evhttp_request *req, void *arg)
     proxy_request_cleanup(p);
 }
 
-evhttp_connection* evhttp_utp_create(network *n, const struct sockaddr *to, socklen_t tolen)
+evhttp_connection* evhttp_utp_create(network *n, const sockaddr *to, socklen_t tolen)
 {
     utp_socket *s = utp_create_socket(n->utp);
     int fd = utp_socket_create_fd(n->evbase, s);
@@ -492,10 +492,10 @@ void submit_request(network *n, evhttp_request *server_req, const evhttp_uri *ur
 
     // https://github.com/libevent/libevent/issues/510
     int fd = bufferevent_getfd(evhttp_connection_get_bufferevent(evcon));
-    struct sockaddr_storage ss;
+    sockaddr_storage ss;
     socklen_t len = sizeof(ss);
-    getpeername(fd, (struct sockaddr *)&ss, &len);
-    if (addr_is_localhost((struct sockaddr *)&ss, len)) {
+    getpeername(fd, (sockaddr *)&ss, &len);
+    if (addr_is_localhost((sockaddr *)&ss, len)) {
         direct_submit_request(p, uri);
     }
     proxy_submit_request(p, uri);
