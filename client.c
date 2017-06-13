@@ -678,7 +678,7 @@ void http_request_cb(evhttp_request *req, void *arg)
     submit_request(n, req, evhttp_request_get_evhttp_uri(req));
 }
 
-int main(int argc, char *argv[])
+int run_client()
 {
     network *n = network_setup("0.0.0.0", "9390");
 
@@ -702,4 +702,9 @@ int main(int argc, char *argv[])
     timer_repeating(n, 25 * 60 * 1000, cb);
 
     return network_loop(n);
+}
+
+int main(int argc, char *argv[])
+{
+    return run_client();
 }
