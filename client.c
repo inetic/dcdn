@@ -680,9 +680,9 @@ void http_request_cb(evhttp_request *req, void *arg)
 
 int run_client()
 {
-    network *n = network_setup("0.0.0.0", "9390");
-
     o_debug = 2;
+
+    network *n = network_setup("0.0.0.0", "9390");
 
     utp_set_callback(n->utp, UTP_ON_ACCEPT, &utp_on_accept);
 
