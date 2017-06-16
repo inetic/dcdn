@@ -114,6 +114,7 @@ void remove_server_req_cb(proxy_request *p)
 
 void proxy_request_cleanup(proxy_request *p)
 {
+    debug("df:%d preq:%p phr:%p dr:%p\n", p->dont_free, p->proxy_req, p->proxy_head_req, p->direct_req);
     if (p->dont_free || p->proxy_req || p->proxy_head_req || p->direct_req) {
         return;
     }
@@ -440,7 +441,7 @@ evhttp_connection* injector_connection(network *n, peer **p)
 
 evhttp_connection* injector_proxy_connection(network *n, peer **p)
 {
-    return peer_connection(n, injectors, injectors_len, p);
+    return peer_connection(n, injector_proxies, injector_proxies_len, p);
 }
 
 void direct_submit_request(proxy_request *p, const evhttp_uri *uri)
@@ -464,6 +465,19 @@ void direct_submit_request(proxy_request *p, const evhttp_uri *uri)
 void proxy_submit_request(proxy_request *p, const evhttp_uri *uri)
 {
     assert(!p->proxy_req);
+
+    evhttp_connection *evcon = injector_connection(p->n, &p->peer);
+    p->injector = true;
+    if (!evcon) {
+        p->injector = false;
+        evcon = injector_proxy_connection(p->n, &p->peer);
+        if (!evcon) {
+            debug("p:%p could not find peers\n", p);
+            proxy_request_cleanup(p);
+            return;
+        }
+    }
+
     p->proxy_req = evhttp_request_new(proxy_request_done_cb, p);
     const char *request_header_whitelist[] = {"Referer"};
     for (size_t i = 0; i < lenof(request_header_whitelist); i++) {
@@ -482,12 +496,6 @@ void proxy_submit_request(proxy_request *p, const evhttp_uri *uri)
 
     char request_uri[2048];
     evhttp_uri_join(uri, request_uri, sizeof(request_uri));
-    evhttp_connection *evcon = injector_connection(p->n, &p->peer);
-    p->injector = true;
-    if (!evcon) {
-        p->injector = false;
-        evcon = injector_proxy_connection(p->n, &p->peer);
-    }
     evhttp_make_request(evcon, p->proxy_req, EVHTTP_REQ_GET, request_uri);
     evhttp_make_request(evcon, p->proxy_head_req, EVHTTP_REQ_HEAD, request_uri);
     debug("p:%p con:%p proxy request submitted: %s\n", p, evhttp_request_get_connection(p->proxy_req), evhttp_request_get_uri(p->proxy_req));
@@ -657,13 +665,18 @@ void connect_request(network *n, evhttp_request *req)
     evhttp_uri_free(uri);
     bufferevent_enable(c->direct, EV_READ);
 
-    c->proxy = evhttp_request_new(NULL, c);
-    evhttp_request_set_header_cb(c->proxy, connect_header_cb);
-    evhttp_request_set_error_cb(c->proxy, connect_error_cb);
     evhttp_connection *evcon = injector_proxy_connection(n, &c->peer);
     if (!evcon) {
         evcon = injector_connection(n, &c->peer);
+        if (!evcon) {
+            debug("c:%p could not find peers\n", c);
+            connect_cleanup(c);
+            return;
+        }
     }
+    c->proxy = evhttp_request_new(NULL, c);
+    evhttp_request_set_header_cb(c->proxy, connect_header_cb);
+    evhttp_request_set_error_cb(c->proxy, connect_error_cb);
     evhttp_make_request(evcon, c->proxy, EVHTTP_REQ_CONNECT, evhttp_request_get_uri(req));
 }
 
