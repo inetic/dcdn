@@ -59,6 +59,7 @@ typedef struct {
     bool dont_free:1;
 } proxy_request;
 
+network *g_n;
 peer *injectors;
 uint injectors_len;
 peer *injector_proxies;
@@ -282,7 +283,7 @@ bool verify_signature(proxy_request *p, const char *sign)
         return false;
     }
 
-    unsigned char pk[crypto_sign_PUBLICKEYBYTES] = testing_pk;
+    unsigned char pk[crypto_sign_PUBLICKEYBYTES] = injector_pk;
 
     content_sig *sig = (content_sig*)raw_sig;
     if (crypto_sign_verify_detached(sig->signature, (uint8_t*)sig->sign, sizeof(content_sig) - sizeof(sig->signature), pk)) {
@@ -691,9 +692,9 @@ void http_request_cb(evhttp_request *req, void *arg)
     submit_request(n, req, evhttp_request_get_evhttp_uri(req));
 }
 
-int run_client()
+void client_init()
 {
-    o_debug = 2;
+    o_debug = 1;
 
     network *n = network_setup("0.0.0.0", "9390");
 
@@ -714,10 +715,16 @@ int run_client()
     cb();
     timer_repeating(n, 25 * 60 * 1000, cb);
 
-    return network_loop(n);
+    g_n = n;
+}
+
+int client_run()
+{
+    return network_loop(g_n);
 }
 
 int main(int argc, char *argv[])
 {
-    return run_client();
+    client_init();
+    return client_run();
 }
