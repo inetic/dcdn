@@ -31,7 +31,6 @@ typedef struct {
 } proxy_request;
 
 hash_table *url_table;
-unsigned char pk[crypto_sign_PUBLICKEYBYTES] = injector_pk;
 unsigned char sk[crypto_sign_SECRETKEYBYTES];
 
 

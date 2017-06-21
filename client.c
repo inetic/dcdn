@@ -24,6 +24,8 @@
 #include "utp_bufferevent.h"
 
 
+unsigned char pk[crypto_sign_PUBLICKEYBYTES];
+
 typedef uint16_t port_t;
 
 typedef struct {
@@ -282,8 +284,6 @@ bool verify_signature(proxy_request *p, const char *sign)
         free(raw_sig);
         return false;
     }
-
-    unsigned char pk[crypto_sign_PUBLICKEYBYTES] = injector_pk;
 
     content_sig *sig = (content_sig*)raw_sig;
     if (crypto_sign_verify_detached(sig->signature, (uint8_t*)sig->sign, sizeof(content_sig) - sizeof(sig->signature), pk)) {
@@ -695,6 +695,19 @@ void http_request_cb(evhttp_request *req, void *arg)
 void client_init()
 {
     o_debug = 1;
+
+    FILE *f = fopen("injector_pk", "rb");
+    if (!f) {
+        die("no injector_pk\n");
+    }
+    fseek(f, 0, SEEK_END);
+    long fsize = ftell(f);
+    if (fsize != sizeof(pk)) {
+        die("wrong size injector_sk\n");
+    }
+    fseek(f, 0, SEEK_SET);
+    fread(pk, fsize, 1, f);
+    fclose(f);
 
     network *n = network_setup("0.0.0.0", "9390");
 
