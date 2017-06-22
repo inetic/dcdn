@@ -90,3 +90,5 @@ clang++ $FLAGS -o injector *.o $LRT $LM $LIBUTP $LIBBTDHT $LIBEVENT $LIBSODIUM $
 mv injector.o injector.o.tmp
 mv client.o.tmp client.o
 clang++ $FLAGS -o client *.o $LRT $LM $LIBUTP $LIBBTDHT $LIBEVENT $LIBSODIUM $LIBBLOCKSRUNTIME
+
+clang $FLAGS -o keygen keygen.c $LIBSODIUM
