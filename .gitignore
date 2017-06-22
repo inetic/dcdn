@@ -1,0 +1,9 @@
+*.o
+client
+dht.dat
+dht.dat
+injector
+injector.o.tmp
+injector_pk
+injector_sk
+keygen
