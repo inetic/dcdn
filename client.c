@@ -28,6 +28,8 @@ unsigned char pk[crypto_sign_PUBLICKEYBYTES];
 
 typedef uint16_t port_t;
 
+bool enable_direct_requests = true;
+
 typedef struct {
     in_addr_t ip;
     port_t port;
@@ -547,7 +549,7 @@ void submit_request(network *n, evhttp_request *server_req, const evhttp_uri *ur
     sockaddr_storage ss;
     socklen_t len = sizeof(ss);
     getpeername(fd, (sockaddr *)&ss, &len);
-    if (addr_is_localhost((sockaddr *)&ss, len)) {
+    if (enable_direct_requests && addr_is_localhost((sockaddr *)&ss, len)) {
         direct_submit_request(p, uri);
     }
     proxy_submit_request(p, uri);
@@ -736,8 +738,35 @@ int client_run()
     return network_loop(g_n);
 }
 
+void usage(const char *name) {
+    fprintf(stderr, "\nUsage:\n");
+    fprintf(stderr, "    %s [options]\n", name);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "    -h      Show this help\n");
+    fprintf(stderr, "    -n      Disable forwarding requests directly to the origin\n");
+    fprintf(stderr, "\n");
+}
+
 int main(int argc, char *argv[])
 {
+    for (;;) {
+        int c = getopt(argc, argv, "nh");
+        if (c == -1)
+            break;
+        switch (c) {
+        case 'n':
+            enable_direct_requests = false;
+            break;
+        case 'h':
+            usage(argv[0]);
+            exit(0);
+            break;
+        default:
+            die("Unhandled argument: %c\n", c);
+        }
+    }
+
     client_init();
     return client_run();
 }
