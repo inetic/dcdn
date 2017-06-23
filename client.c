@@ -32,6 +32,7 @@ port_t tcp_port = 8006;
 
 bool enable_direct_requests = true;
 bool enable_injector_search = true;
+bool enable_injector_helper_search = true;
 
 typedef struct {
     in_addr_t ip;
@@ -102,7 +103,7 @@ void add_addresses(peer **peers, uint *ppeers_len, const byte *addrs, uint num_a
 void update_injector_proxy_swarm(network *n)
 {
     add_nodes_callblock c = ^(const byte *peers, uint num_peers) {
-        if (peers) {
+        if (enable_injector_helper_search && peers) {
             add_addresses(&injector_proxies, &injector_proxies_len, peers, num_peers);
         }
     };
@@ -750,18 +751,22 @@ void usage(const char *name) {
     fprintf(stderr, "    -p <tcp port> Port on which this client shall receive local requests\n");
     fprintf(stderr, "    -n            Disable forwarding requests directly to the origin\n");
     fprintf(stderr, "    -i            Disable searching for injectors in the DHT\n");
+    fprintf(stderr, "    -l            Disable searching for injector helpers in the DHT\n");
     fprintf(stderr, "\n");
 }
 
 int main(int argc, char *argv[])
 {
     for (;;) {
-        int c = getopt(argc, argv, "nhp:i");
+        int c = getopt(argc, argv, "nhp:il");
         if (c == -1)
             break;
         switch (c) {
         case 'i':
             enable_injector_search = false;
+            break;
+        case 'l':
+            enable_injector_helper_search = false;
             break;
         case 'n':
             enable_direct_requests = false;
