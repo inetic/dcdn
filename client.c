@@ -28,6 +28,8 @@ unsigned char pk[crypto_sign_PUBLICKEYBYTES];
 
 typedef uint16_t port_t;
 
+port_t tcp_port = 8006;
+
 bool enable_direct_requests = true;
 
 typedef struct {
@@ -717,7 +719,7 @@ void client_init()
 
     evhttp_set_allowed_methods(n->http, EVHTTP_REQ_GET | EVHTTP_REQ_CONNECT);
     evhttp_set_gencb(n->http, http_request_cb, n);
-    evhttp_bind_socket_with_handle(n->http, "0.0.0.0", 8006);
+    evhttp_bind_socket_with_handle(n->http, "0.0.0.0", tcp_port);
 
     timer_callback cb = ^{
         dht_get_peers(n->dht, injector_swarm, ^(const byte *peers, uint num_peers) {
@@ -743,20 +745,24 @@ void usage(const char *name) {
     fprintf(stderr, "    %s [options]\n", name);
     fprintf(stderr, "\n");
     fprintf(stderr, "Options:\n");
-    fprintf(stderr, "    -h      Show this help\n");
-    fprintf(stderr, "    -n      Disable forwarding requests directly to the origin\n");
+    fprintf(stderr, "    -h            Show this help\n");
+    fprintf(stderr, "    -p <tcp port> Port on which this client shall receive local requests\n");
+    fprintf(stderr, "    -n            Disable forwarding requests directly to the origin\n");
     fprintf(stderr, "\n");
 }
 
 int main(int argc, char *argv[])
 {
     for (;;) {
-        int c = getopt(argc, argv, "nh");
+        int c = getopt(argc, argv, "nhp:");
         if (c == -1)
             break;
         switch (c) {
         case 'n':
             enable_direct_requests = false;
+            break;
+        case 'p':
+            tcp_port = atoi(optarg);
             break;
         case 'h':
             usage(argv[0]);
