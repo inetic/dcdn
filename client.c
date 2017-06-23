@@ -722,18 +722,16 @@ void client_init()
     evhttp_set_gencb(n->http, http_request_cb, n);
     evhttp_bind_socket_with_handle(n->http, "0.0.0.0", tcp_port);
 
-    if (enable_injector_search) {
-        timer_callback cb = ^{
-            dht_get_peers(n->dht, injector_swarm, ^(const byte *peers, uint num_peers) {
-                if (peers) {
-                    add_addresses(&injectors, &injectors_len, peers, num_peers);
-                }
-            });
-            update_injector_proxy_swarm(n);
-        };
-        cb();
-        timer_repeating(n, 25 * 60 * 1000, cb);
-    }
+    timer_callback cb = ^{
+        dht_get_peers(n->dht, injector_swarm, ^(const byte *peers, uint num_peers) {
+            if (enable_injector_search && peers) {
+                add_addresses(&injectors, &injectors_len, peers, num_peers);
+            }
+        });
+        update_injector_proxy_swarm(n);
+    };
+    cb();
+    timer_repeating(n, 25 * 60 * 1000, cb);
 
     g_n = n;
 }
@@ -751,7 +749,7 @@ void usage(const char *name) {
     fprintf(stderr, "    -h            Show this help\n");
     fprintf(stderr, "    -p <tcp port> Port on which this client shall receive local requests\n");
     fprintf(stderr, "    -n            Disable forwarding requests directly to the origin\n");
-    fprintf(stderr, "    -i            Disable searching for injectors\n");
+    fprintf(stderr, "    -i            Disable searching for injectors in the DHT\n");
     fprintf(stderr, "\n");
 }
 
