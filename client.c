@@ -31,6 +31,7 @@ typedef uint16_t port_t;
 port_t tcp_port = 8006;
 
 bool enable_direct_requests = true;
+bool enable_injector_search = true;
 
 typedef struct {
     in_addr_t ip;
@@ -721,16 +722,18 @@ void client_init()
     evhttp_set_gencb(n->http, http_request_cb, n);
     evhttp_bind_socket_with_handle(n->http, "0.0.0.0", tcp_port);
 
-    timer_callback cb = ^{
-        dht_get_peers(n->dht, injector_swarm, ^(const byte *peers, uint num_peers) {
-            if (peers) {
-                add_addresses(&injectors, &injectors_len, peers, num_peers);
-            }
-        });
-        update_injector_proxy_swarm(n);
-    };
-    cb();
-    timer_repeating(n, 25 * 60 * 1000, cb);
+    if (enable_injector_search) {
+        timer_callback cb = ^{
+            dht_get_peers(n->dht, injector_swarm, ^(const byte *peers, uint num_peers) {
+                if (peers) {
+                    add_addresses(&injectors, &injectors_len, peers, num_peers);
+                }
+            });
+            update_injector_proxy_swarm(n);
+        };
+        cb();
+        timer_repeating(n, 25 * 60 * 1000, cb);
+    }
 
     g_n = n;
 }
@@ -748,16 +751,20 @@ void usage(const char *name) {
     fprintf(stderr, "    -h            Show this help\n");
     fprintf(stderr, "    -p <tcp port> Port on which this client shall receive local requests\n");
     fprintf(stderr, "    -n            Disable forwarding requests directly to the origin\n");
+    fprintf(stderr, "    -i            Disable searching for injectors\n");
     fprintf(stderr, "\n");
 }
 
 int main(int argc, char *argv[])
 {
     for (;;) {
-        int c = getopt(argc, argv, "nhp:");
+        int c = getopt(argc, argv, "nhp:i");
         if (c == -1)
             break;
         switch (c) {
+        case 'i':
+            enable_injector_search = false;
+            break;
         case 'n':
             enable_direct_requests = false;
             break;
