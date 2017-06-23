@@ -711,7 +711,7 @@ void client_init()
     fread(pk, fsize, 1, f);
     fclose(f);
 
-    network *n = network_setup("0.0.0.0", "9390");
+    network *n = network_setup("0.0.0.0", "0");
 
     utp_set_callback(n->utp, UTP_ON_ACCEPT, &utp_on_accept);
 
