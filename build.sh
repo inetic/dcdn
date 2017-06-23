@@ -72,7 +72,7 @@ LIBBTDHT="libbtdht/libbtdht.a libbtdht/btutils/libbtutils.a"
 FLAGS="-g -Werror -Wall -Wextra -Wno-deprecated-declarations -Wno-unused-parameter -Wno-unused-variable -Wno-error=shadow -Wfatal-errors \
   -fPIC -fblocks -fdata-sections -ffunction-sections \
   -fno-rtti -fno-exceptions -fno-common -fno-inline -fno-optimize-sibling-calls -funwind-tables -fno-omit-frame-pointer -fstack-protector-all \
-  -D__FAVOR_BSD -D_BSD_SOURCE"
+  -D__FAVOR_BSD -D_DEFAULT_SOURCE"
 FLAGS="$FLAGS -O0 -fsanitize=address -DDEBUG=1"
 
 CFLAGS="$FLAGS -std=gnu11"
