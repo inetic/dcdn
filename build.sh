@@ -1,6 +1,15 @@
 #!/bin/bash
 set -e
 
+if [ "$1" == "clean" ]; then
+    (cd libutp && make clean || true)
+    (cd Libevent && make clean || true)
+    (cd libbtdht/btutils && rm *.o libbtutils.a || true)
+    (cd libbtdht && rm *.o libbtdht.a || true)
+    rm *.o injector client keygen || true
+    exit 0
+fi
+
 #cd openssl
 #OPENSSL_DIR="$(pwd)/.native"
 #if [ ! -d $OPENSSL_DIR ]; then
