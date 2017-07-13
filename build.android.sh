@@ -5,6 +5,28 @@ export ARCH=arm
 CPU_ARCH=armv7-a
 TRIPLE=arm-linux-androideabi
 NDK_API=26
+
+if [ "$1" == "clean" ]; then
+    (cd libutp && make clean || true)
+    (cd Libevent && make clean || true)
+    (cd libbtdht/btutils && rm *.o libbtutils.a || true)
+    (cd libbtdht && rm *.o libbtdht.a || true)
+    (cd libsodium && make clean || true)
+    (rm -rf libsodium/libsodium-android-$CPU_ARCH)
+    (rm -rf ./android-toolchain-armv7-a/)
+    (rm -rf ./libsodium/libsodium-android-armv7-a/)
+    rm -rf android/.gradle/
+    rm -rf android/build/
+    rm -rf android/examples/WebViewSample/.gradle/
+    rm -rf android/examples/WebViewSample/app/build/
+    rm -rf android/examples/WebViewSample/.idea/
+    rm -rf android/examples/WebViewSample/build/
+    rm -rf android/examples/WebViewSample/local.properties
+    rm -rf android/src/main/jniLibs/
+    rm libdcdn.so *.o injector client keygen || true
+    exit 0
+fi
+
 export TOOLCHAIN="$(pwd)/android-toolchain-$CPU_ARCH"
 if [ ! -d $TOOLCHAIN ]; then
     $ANDROID_NDK_HOME/build/tools/make_standalone_toolchain.py --force --unified-headers --api=$NDK_API --arch=$ARCH --stl=libc++ --install-dir="$TOOLCHAIN"

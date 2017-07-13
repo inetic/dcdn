@@ -6,6 +6,7 @@ if [ "$1" == "clean" ]; then
     (cd Libevent && make clean || true)
     (cd libbtdht/btutils && rm *.o libbtutils.a || true)
     (cd libbtdht && rm *.o libbtdht.a || true)
+    (cd libsodium && make clean || true)
     rm *.o injector client keygen || true
     exit 0
 fi
