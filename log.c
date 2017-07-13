@@ -3,6 +3,10 @@
 #include <stdarg.h>
 #include <errno.h>
 
+#ifdef __ANDROID__
+#   include <android/log.h>
+#endif
+
 
 int o_debug = 0;
 
@@ -11,7 +15,11 @@ void die(const char *fmt, ...)
     va_list ap;
     fflush(stdout);
     va_start(ap, fmt);
+#ifndef __ANDROID__
     vfprintf(stderr, fmt, ap);
+#else
+    __android_log_vprint(ANDROID_LOG_VERBOSE, "dcdn", fmt, ap);
+#endif
     va_end(ap);
     exit(1);
 }
@@ -23,7 +31,11 @@ void debug(const char *fmt, ...)
         fflush(stdout);
         //fprintf(stderr, "debug: ");
         va_start(ap, fmt);
+#ifndef __ANDROID__
         vfprintf(stderr, fmt, ap);
+#else
+        __android_log_vprint(ANDROID_LOG_VERBOSE, "dcdn", fmt, ap);
+#endif
         va_end(ap);
         fflush(stderr);
     }
