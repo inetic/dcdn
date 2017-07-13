@@ -702,6 +702,7 @@ void client_init()
 {
     o_debug = 1;
 
+#ifndef __ANDROID__
     FILE *f = fopen("injector_pk", "rb");
     if (!f) {
         die("no injector_pk\n");
@@ -714,6 +715,17 @@ void client_init()
     fseek(f, 0, SEEK_SET);
     fread(pk, fsize, 1, f);
     fclose(f);
+#else // if android
+    {
+        const char hardcoded_pk[] = { 0xff, 0xb6, 0x0f, 0xec, 0x1b, 0x4a, 0x55, 0xe5,
+                                      0xc0, 0x05, 0xca, 0xbe, 0x48, 0xf1, 0x69, 0xdb,
+                                      0x53, 0x2a, 0x1c, 0x83, 0xe8, 0xd4, 0x3e, 0x32,
+                                      0x3f, 0x73, 0x50, 0xd0, 0xee, 0xc1, 0x75, 0xc3 };
+
+        assert(sizeof(hardcoded_pk) == sizeof(pk));
+        memcpy(pk, hardcoded_pk, sizeof(pk));
+    }
+#endif
 
     network *n = network_setup("0.0.0.0", "0");
 
