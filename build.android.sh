@@ -4,7 +4,7 @@ set -e
 export ARCH=arm
 CPU_ARCH=armv7-a
 TRIPLE=arm-linux-androideabi
-NDK_API=26
+NDK_API=23
 
 if [ "$1" == "clean" ]; then
     (cd libutp && make clean || true)
