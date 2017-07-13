@@ -702,6 +702,11 @@ void client_init()
 {
     o_debug = 1;
 
+#ifdef __ANDROID__
+    enable_direct_requests = false;
+    enable_injector_helper_search = false;
+#endif
+
 #ifndef __ANDROID__
     FILE *f = fopen("injector_pk", "rb");
     if (!f) {
