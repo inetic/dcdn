@@ -131,4 +131,8 @@ clang++ $FLAGS -shared -o libdcdn.so *.o -static-libstdc++ -lm $LIBUTP $LIBBTDHT
 if [ -z "$DEBUG" ]; then
     strip -x libdcdn.so
 fi
+`which file` && file libdcdn.so
 ls -l libdcdn.so
+
+mkdir -p android/src/main/jniLibs/armeabi
+cp libdcdn.so android/src/main/jniLibs/armeabi/
