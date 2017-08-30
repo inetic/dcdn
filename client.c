@@ -74,6 +74,7 @@ uint injector_proxies_len;
 peer *all_peers;
 uint all_peers_len;
 time_t injector_reachable;
+bool try_direct = true;
 
 
 bool memeq(const uint8_t *a, const uint8_t *b, size_t len)
@@ -711,7 +712,7 @@ void submit_request(network *n, evhttp_request *server_req, const evhttp_uri *ur
     getpeername(fd, (sockaddr *)&ss, &len);
     const char *xdht = evhttp_find_header(evhttp_request_get_input_headers(server_req), "X-DHT");
     const char *xpeer = evhttp_find_header(evhttp_request_get_input_headers(server_req), "X-Peer");
-    if (!xdht && !xpeer && addr_is_localhost((sockaddr *)&ss, len)) {
+    if (try_direct && !xdht && !xpeer && addr_is_localhost((sockaddr *)&ss, len)) {
         direct_submit_request(p, uri);
     }
     proxy_submit_request(p, uri);
@@ -935,13 +936,16 @@ int main(int argc, char *argv[])
     o_debug = 1;
 
     for (;;) {
-        int c = getopt(argc, argv, "p:");
+        int c = getopt(argc, argv, "np:");
         if (c == -1) {
             break;
         }
         switch (c) {
         case 'p':
             port_s = optarg;
+            break;
+        case 'n':
+            try_direct = false;
             break;
         default:
             die("Unhandled argument: %c\n", c);
