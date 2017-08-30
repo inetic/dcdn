@@ -65,7 +65,7 @@ http_proxy=localhost:$CLIENT_PORT do_curl $LOCAL_ORIGIN $HTTP_OK
 
 #-------------------------------------------------------------------------------
 echo "$(now) Testing HTTPS forwarding."
-http_proxy=localhost:$CLIENT_PORT do_curl https://www.google.com $HTTP_OK
+http_proxy=localhost:$CLIENT_PORT do_curl https://www.google.com $HTTP_FOUND
 
 #-------------------------------------------------------------------------------
 echo "$(now) Test indirect."
