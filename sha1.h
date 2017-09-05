@@ -26,4 +26,6 @@ void SHA1Final(unsigned char digest[20], SHA1_CTX *context);
 
 void SHA1(unsigned char *hash_out, const unsigned char *data, unsigned int len);
 
+void SALTED_SHA1(const char* salt, uint8_t* hash_out, const unsigned char* data, size_t len);
+
 #endif // __SHA1_H__

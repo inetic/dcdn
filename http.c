@@ -22,13 +22,12 @@
 #include "utp_bufferevent.h"
 #include "http.h"
 
-
-void join_url_swarm(network *n, const char *url)
+void join_url_swarm(const char* salt, network *n, const char *url)
 {
     __block struct {
         uint8_t url_hash[20];
     } hash_state;
-    SHA1(hash_state.url_hash, (const unsigned char *)url, strlen(url));
+    SALTED_SHA1(salt, hash_state.url_hash, (uint8_t*) url, strlen(url));
 
     // TODO: stop after 24hr
     timer_callback cb = ^{
@@ -42,10 +41,10 @@ void join_url_swarm(network *n, const char *url)
     timer_repeating(n, 25 * 60 * 1000, cb);
 }
 
-void fetch_url_swarm(network *n, const char *url, add_nodes_callblock add_nodes)
+void fetch_url_swarm(const char* salt, network *n, const char *url, add_nodes_callblock add_nodes)
 {
     uint8_t url_hash[20];
-    SHA1(url_hash, (const unsigned char *)url, strlen(url));
+    SALTED_SHA1(salt, url_hash, (uint8_t*) url, strlen(url));
     dht_get_peers(n->dht, url_hash, add_nodes);
 }
 

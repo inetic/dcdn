@@ -14,6 +14,7 @@
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 
+#include "sha1.h"
 #include "log.h"
 #include "utp.h"
 #include "http.h"
@@ -75,6 +76,7 @@ peer *all_peers;
 uint all_peers_len;
 time_t injector_reachable;
 bool try_direct = true;
+const char* swarm_salt = "";
 
 
 bool memeq(const uint8_t *a, const uint8_t *b, size_t len)
@@ -124,10 +126,14 @@ void update_injector_proxy_swarm(network *n)
             add_addresses(&injector_proxies, &injector_proxies_len, peers, num_peers);
         }
     };
+
+    uint8_t swarm[20];
+    SALTED_SHA1(swarm_salt, swarm, unsalted_injector_proxy_swarm, 20);
+
     if (injector_reachable) {
-        dht_get_peers(n->dht, injector_proxy_swarm, c);
+        dht_get_peers(n->dht, swarm, c);
     } else {
-        dht_announce(n->dht, injector_proxy_swarm, c);
+        dht_announce(n->dht, swarm, c);
     }
 }
 
@@ -464,7 +470,7 @@ void proxy_request_done_cb(evhttp_request *req, void *arg)
                 }
                 remove_server_req_cb(p);
                 p->server_req = NULL;
-                join_url_swarm(p->n, content_location);
+                join_url_swarm(swarm_salt, p->n, content_location);
             }
         }
     }
@@ -628,7 +634,7 @@ void proxy_submit_request(proxy_request *p, const evhttp_uri *uri)
 
     p->dht_lookup_running = true;
     __block bool dht_lookup_cancelled = p->dht_lookup_cancelled;
-    fetch_url_swarm(p->n, evhttp_request_get_uri(p->server_req), ^(const byte *peers, uint num_peers) {
+    fetch_url_swarm(swarm_salt, p->n, evhttp_request_get_uri(p->server_req), ^(const byte *peers, uint num_peers) {
         if (peers) {
             add_addresses(&all_peers, &all_peers_len, peers, num_peers);
         }
@@ -911,7 +917,10 @@ void client_init(port_t port)
     printf("listening on TCP:%s:%d\n", "0.0.0.0", port);
 
     timer_callback cb = ^{
-        dht_get_peers(n->dht, injector_swarm, ^(const byte *peers, uint num_peers) {
+        uint8_t swarm[20];
+        SALTED_SHA1(swarm_salt, swarm, unsalted_injector_swarm, 20);
+
+        dht_get_peers(n->dht, swarm, ^(const byte *peers, uint num_peers) {
             if (peers) {
                 add_addresses(&injectors, &injectors_len, peers, num_peers);
             }
@@ -936,7 +945,7 @@ int main(int argc, char *argv[])
     o_debug = 1;
 
     for (;;) {
-        int c = getopt(argc, argv, "np:");
+        int c = getopt(argc, argv, "np:t:");
         if (c == -1) {
             break;
         }
@@ -946,6 +955,9 @@ int main(int argc, char *argv[])
             break;
         case 'n':
             try_direct = false;
+            break;
+        case 't':
+            swarm_salt = optarg;
             break;
         default:
             die("Unhandled argument: %c\n", c);

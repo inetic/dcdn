@@ -23,6 +23,7 @@
 #include "utp_bufferevent.h"
 #include "http.h"
 
+const char* swarm_salt = "";
 
 typedef struct {
     network *n;
@@ -355,7 +356,7 @@ int main(int argc, char *argv[])
     o_debug = 1;
 
     for (;;) {
-        int c = getopt(argc, argv, "p:s:");
+        int c = getopt(argc, argv, "p:s:t:");
         if (c == -1) {
             break;
         }
@@ -365,6 +366,9 @@ int main(int argc, char *argv[])
             break;
         case 's':
             address = optarg;
+            break;
+        case 't':
+            swarm_salt = optarg;
             break;
         default:
             die("Unhandled argument: %c\n", c);
@@ -398,7 +402,10 @@ int main(int argc, char *argv[])
     utp_set_callback(n->utp, UTP_ON_ACCEPT, &utp_on_accept);
 
     timer_callback cb = ^{
-        dht_announce(n->dht, injector_swarm, ^(const byte *peers, uint num_peers) {
+        uint8_t swarm[20];
+        SALTED_SHA1(swarm_salt, swarm, unsalted_injector_swarm, 20);
+
+        dht_announce(n->dht, swarm, ^(const byte *peers, uint num_peers) {
             if (!peers) {
                 printf("announce complete\n");
             }

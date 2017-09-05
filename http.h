@@ -22,8 +22,8 @@ typedef struct bufferevent bufferevent;
 typedef struct evhttp_request evhttp_request;
 typedef struct evhttp_connection evhttp_connection;
 
-void join_url_swarm(network *n, const char *url);
-void fetch_url_swarm(network *n, const char *url, add_nodes_callblock add_nodes);
+void join_url_swarm(const char* salt, network *n, const char *url);
+void fetch_url_swarm(const char* salt, network *n, const char *url, add_nodes_callblock add_nodes);
 
 int get_port_for_scheme(const char *scheme);
 

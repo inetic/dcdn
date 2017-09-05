@@ -245,3 +245,14 @@ void SHA1(unsigned char *hash_out, const unsigned char *data, unsigned int len)
     SHA1Final(hash_out, &ctx);
 }
 #endif
+
+void SALTED_SHA1(const char* salt, uint8_t* hash_out, const unsigned char* data, size_t len) {
+    SHA1_CTX ctx;
+    SHA1Init(&ctx);
+    SHA1Update(&ctx, (const unsigned char*) salt, strlen(salt));
+    // TODO: Do we need to do this one by one? (copy pasted from above)
+    for (unsigned int ii = 0; ii < len; ii += 1) {
+        SHA1Update(&ctx, (unsigned char*) data + ii, 1);
+    }
+    SHA1Final(hash_out, &ctx);
+}
